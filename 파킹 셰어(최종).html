@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" name="viewport"/>
+  <meta content="mobile_tab" name="shell-type"/>
+  <title>파킹셰어 - Smart Parking Platform (Live Google Map & Interactive Visual Floor Plan)</title>
+  
+  <!-- Fonts & Material Symbols -->
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet"/>
+  
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <style>
+    @layer base {
+      html, body { width: 100%; height: 100%; margin: 0; padding: 0; background-color: #faf8ff; font-family: 'Noto Sans KR', sans-serif; }
+      body { overscroll-behavior-y: none; -webkit-tap-highlight-color: transparent; }
+      .pb-safe { padding-bottom: env(safe-area-inset-bottom, 0px); }
+      .pt-safe { padding-top: env(safe-area-inset-top, 0px); }
+    }
+    ::-webkit-scrollbar { display: none; }
+    .page-section { display: none; }
+    .page-section.active { display: flex; flex-direction: column; }
+    
+    /* Pulse Sonar Animation for User Location */
+    @keyframes sonar-pulse {
+      0% { transform: scale(0.8); opacity: 0.9; }
+      100% { transform: scale(2.4); opacity: 0; }
+    }
+    .sonar-ring {
+      animation: sonar-pulse 2s infinite ease-out;
+    }
+
+    /* Floating Marker Bounce */
+    @keyframes pin-float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-6px); }
+    }
+    .marker-active-bounce {
+      animation: pin-float 1.8s ease-in-out infinite;
+    }
+
+    /* Parking Slot Custom Visual Elements */
+    .parking-bay {
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      position: relative;
+    }
+    .parking-bay:hover {
+      transform: translateY(-2px);
+    }
+    
+    /* Vehicle entry animation */
+    @keyframes car-enter {
+      0% { opacity: 0; transform: scale(0.8) translateY(10px); }
+      100% { opacity: 1; transform: scale(1) translateY(0); }
+    }
+    .car-animated {
+      animation: car-enter 0.3s ease-out forwards;
+    }
+
+    /* Modal Slide Up Animation */
+    @keyframes slide-up {
+      from { transform: translateY(100%); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+    .animate-slide-up {
+      animation: slide-up 0.35s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+    }
+
+    /* Hide Google Maps default info box clutter */
+    .gm-style-cc, a[href^="https://maps.google.com/maps"] {
+      display: none !important;
+    }
+    .gm-svpc {
+      display: none !important;
+    }
+
+    /* Dual Range Slider Styles */
+    .dual-range {
+      position: relative;
+      width: 100%;
+      height: 8px;
+    }
+    .dual-range input[type="range"] {
+      position: absolute;
+      width: 100%;
+      height: 8px;
+      background: transparent;
+      appearance: none;
+      pointer-events: none;
+      outline: none;
+      z-index: 20;
+    }
+    .dual-range input[type="range"]::-webkit-slider-thumb {
+      pointer-events: auto;
+      appearance: none;
+      width: 24px;
+      height: 24px;
+      border-radius: 50%;
+      background: #ffffff;
+      border: 3px solid #f59e0b; /* Amber-500 */
+      box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+      cursor: grab;
+      margin-top: -8px; /* Alignment */
+    }
+    .dual-range input[type="range"]::-webkit-slider-runnable-track {
+      width: 100%;
+      height: 8px;
+      background: transparent;
+      border: none;
+    }
+
+    /* Drag & Drop Visuals */
+    .drag-item {
+      cursor: grab;
+      transition: transform 0.2s;
+      touch-action: none; /* Prevent scrolling when dragging on touch devices */
+    }
+    .drag-item:active {
+      cursor: grabbing;
+      transform: scale(0.95);
+    }
+    .drop-zone {
+      transition: all 0.3s ease;
+    }
+    .drop-zone.dragover {
+      background-color: #fef3c7; /* amber-50 */
+      border-color: #f59e0b; /* amber-500 */
+      transform: scale(1.02);
+    }
+    
+    /* Profit item pill animation */
+    @keyframes pop-in {
+      0% { opacity: 0; transform: scale(0.5); }
+      100% { opacity: 1; transform: scale(1); }
+    }
+    .profit-pill {
+      animation: pop-in 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+    }
+  </style>
+
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            'on-secondary': '#ffffff',
+            'secondary-container': '#82f5c1',
+            'background': '#faf8ff',
+            'surface-container': '#eaedff',
+            'surface-bright': '#faf8ff',
+            'surface-container-low': '#f2f3ff',
+            'surface-container-lowest': '#ffffff',
+            'on-background': '#131b2e',
+            'on-surface-variant': '#434655',
+            'on-secondary-container': '#00714e',
+            'secondary': '#006c4a',
+            'primary': '#0037b0',
+            'primary-fixed': '#dce1ff',
+            'outline': '#747686',
+            'on-surface': '#131b2e',
+            'surface': '#faf8ff',
+            'primary-container': '#1d4ed8'
+          },
+          borderRadius: {
+            'DEFAULT': '0.25rem',
+            'lg': '0.5rem',
+            'xl': '0.75rem',
+            '2xl': '1rem',
+            '3xl': '1.5rem',
+            'full': '9999px'
+          },
+          spacing: {
+            'margin': '1.25rem',
+            'space-md': '0.75rem',
+            'space-sm': '0.5rem'
+          }
+        }
+      }
+    };
+  </script>
+
+  <!-- Google Maps JavaScript API -->
+  <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCjFuuVJwILPxT91ZUnn_J5x0AFUPfqnkM&libraries=places,geometry,routes&callback=initMap" async defer></script>
+</head>
+
+<body class="bg-surface text-on-surface antialiased flex flex-col min-h-screen">
+  
+  <header class="fixed top-0 inset-x-0 z-40 bg-surface/90 backdrop-blur-xl shadow-[0_1px_12px_rgba(19,27,46,0.06)] pt-safe">
+    <div class="h-16 px-margin flex items-center justify-between">
+      <div class="flex items-center gap-2.5">
+        <div class="w-10 h-10 rounded-2xl bg-primary flex items-center justify-center text-white shadow-[0_4px_14px_rgba(0,55,176,0.28)]">
+          <span class="material-symbols-outlined text-[24px]">local_parking</span>
+        </div>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-1.5">
+            <span class="font-bold text-lg text-on-surface tracking-tight">파킹셰어</span>
+            <span class="px-2 py-0.5 rounded-full bg-secondary-container text-on-secondary-container font-extrabold text-[10px] uppercase tracking-wider">LIVE</span>
+          </div>
+          <span class="text-xs text-on-surface-variant font-medium leading-none" id="header-subtitle">강남역 · 테헤란로 · 역삼역</span>
+        </div>
+      </div>
+      <div class="flex items-center gap-1">
+        <button aria-label="알림" class="w-10 h-10 flex items-center justify-center rounded-full text-on-surface-variant hover:text-on-surface hover:bg-surface-container active:scale-95 transition-all" type="button">
+          <span class="material-symbols-outlined text-[22px]">notifications</span>
+        </button>
+        <button aria-label="프로필" class="w-10 h-10 flex items-center justify-center rounded-full hover:opacity-90 active:scale-95 transition-all" type="button">
+          <img alt="Profile" class="w-8 h-8 rounded-full object-cover border border-primary/20" src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&auto=format&fit=crop&q=80"/>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main class="flex-1 flex flex-col relative w-full pt-16 pb-20 bg-surface">
+
+    <div id="page1" class="page-section active w-full">
+      <div class="flex flex-col w-full relative select-none">
+        <!-- Top Search Bar & Filter Chips -->
+        <div class="px-margin pt-3 pb-2 z-30 flex flex-col gap-2.5 bg-gradient-to-b from-surface via-surface/95 to-transparent">
+          <form class="w-full bg-white shadow-[0_8px_24px_-4px_rgba(19,27,46,0.12)] rounded-2xl px-4 py-2.5 flex items-center gap-2 transition-all border border-slate-200/80 focus-within:border-primary focus-within:shadow-[0_8px_30px_rgba(0,55,176,0.18)]" onsubmit="handleSearch(event)">
+            <span class="material-symbols-outlined text-primary text-[22px]" style="font-variation-settings: 'FILL' 1;">search</span>
+            <input id="map-search-input" class="w-full bg-transparent text-on-surface placeholder:text-outline text-sm font-medium focus:outline-none min-w-0" placeholder="목적지, 건물명 또는 주소 검색" type="text" value="강남역 12번 출구 주변"/>
+            <button aria-label="검색 제출" type="submit" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform">
+              <span class="material-symbols-outlined text-[20px]">arrow_forward</span>
+            </button>
+            <div class="w-px h-5 bg-outline-variant/60 my-auto"></div>
+            <button aria-label="상세 필터" class="w-8 h-8 rounded-full flex items-center justify-center text-on-surface-variant hover:text-primary active:scale-90 transition-transform" type="button" onclick="setFilter('all', this)">
+              <span class="material-symbols-outlined text-[20px]">tune</span>
+            </button>
+          </form>
+
+          <div class="flex items-center gap-2 overflow-x-auto no-scrollbar py-0.5" id="filter-chip-container">
+            <button class="filter-btn active-chip flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-primary text-white text-xs font-bold shadow-sm whitespace-nowrap active:scale-95 transition-all" data-filter="all" onclick="setFilter('all', this)" type="button">
+              <span class="material-symbols-outlined text-[15px]">done</span>
+              <span>전체 주차장</span>
+            </button>
+            <button class="filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-slate-700 text-xs font-medium shadow-sm border border-slate-200 whitespace-nowrap active:scale-95 transition-all hover:bg-slate-50" data-filter="available" onclick="setFilter('available', this)" type="button">
+              <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+              <span class="font-bold text-emerald-700">여유 (10석 초과)</span>
+            </button>
+            <button class="filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-slate-700 text-xs font-medium shadow-sm border border-slate-200 whitespace-nowrap active:scale-95 transition-all hover:bg-slate-50" data-filter="congested" onclick="setFilter('congested', this)" type="button">
+              <span class="w-2.5 h-2.5 rounded-full bg-rose-500"></span>
+              <span class="font-bold text-rose-700">혼잡 (10석 이하)</span>
+            </button>
+            <button class="filter-btn flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-slate-700 text-xs font-medium shadow-sm border border-slate-200 whitespace-nowrap active:scale-95 transition-all hover:bg-slate-50" data-filter="p2p" onclick="setFilter('p2p', this)" type="button">
+              <span class="material-symbols-outlined text-[15px] text-blue-600">handshake</span>
+              <span>P2P 민간 공유</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- GOOGLE MAP CANVAS -->
+        <div class="relative w-full h-[480px] overflow-hidden bg-slate-100 shadow-inner border-y border-slate-200">
+          <div id="google-map-canvas" class="w-full h-full"></div>
+          
+          <div class="absolute left-4 top-4 z-20 flex flex-wrap items-center gap-2 pointer-events-none">
+            <div class="bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-full shadow-lg text-xs font-bold text-slate-800 flex items-center gap-2 border border-slate-200/80 pointer-events-auto">
+              <span class="relative flex h-2.5 w-2.5">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500"></span>
+              </span>
+              <span>Google Maps 실시간</span>
+            </div>
+            
+            <div id="route-indicator" class="hidden bg-slate-800/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full shadow-lg text-xs font-bold flex items-center gap-1.5 border border-slate-700/80 animate-pop-in pointer-events-auto">
+              <span class="material-symbols-outlined text-[16px] text-emerald-400">directions_car</span>
+              <span>경로 안내중</span>
+            </div>
+          </div>
+
+          <div class="absolute right-4 top-4 z-20 flex flex-col gap-2">
+            <button id="gps-btn" onclick="recenterLocation()" class="w-10 h-10 rounded-2xl bg-white shadow-xl flex items-center justify-center text-slate-700 hover:text-blue-600 active:scale-90 transition-all border border-slate-200/80" type="button" title="현재 위치">
+              <span id="gps-icon" class="material-symbols-outlined text-[22px]">my_location</span>
+            </button>
+            <button id="traffic-btn" onclick="toggleTrafficLayer()" class="px-2.5 py-1 rounded-xl bg-white/95 backdrop-blur-md shadow-xl text-[11px] font-bold text-slate-700 border border-slate-200/80 active:scale-95 transition-all" type="button">
+              교통정보 OFF
+            </button>
+          </div>
+        </div>
+
+        <div class="px-margin pt-3 pb-4">
+          <div class="bg-white rounded-3xl p-4 shadow-xl border border-slate-100 flex flex-col gap-3 relative overflow-hidden transition-all duration-300" id="bottom-detail-card">
+            <div class="flex items-start justify-between gap-2">
+              <div class="flex flex-col min-w-0">
+                <div class="flex items-center gap-2">
+                  <span class="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider" id="card-tag">추천 최저가</span>
+                  <span class="text-xs text-slate-500 font-medium" id="card-walk">도보 2분</span>
+                </div>
+                <h3 class="text-lg font-black text-slate-900 tracking-tight mt-1 truncate" id="card-title">강남 센트럴타워 지하주차장</h3>
+                <p class="text-xs text-slate-500 font-medium truncate mt-0.5" id="card-subtext">서울 강남구 테헤란로 105 (강남역 12번 출구 120m)</p>
+              </div>
+
+              <div class="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-emerald-50 border border-emerald-200 shrink-0" id="vacancy-badge-box">
+                <div class="flex flex-col text-right">
+                  <span class="text-xs text-emerald-700 font-extrabold leading-tight" id="card-vacancy">여유 24석</span>
+                  <span class="text-[10px] text-emerald-600 font-medium leading-none" id="card-total">총 150면</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="flex items-center justify-between pt-2 border-t border-slate-100">
+              <div class="flex items-baseline gap-1">
+                <span class="text-xl font-black text-slate-900" id="card-price">₩2,000</span>
+                <span class="text-xs text-slate-500 font-medium" id="card-unit">/ 30분</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <button class="px-4 py-2.5 rounded-2xl bg-slate-100 text-slate-700 font-bold text-xs hover:bg-slate-200 active:scale-95 transition-all" onclick="navigateToPage('page2')" type="button">
+                  2D 도면
+                </button>
+                <button class="px-5 py-2.5 rounded-2xl bg-blue-600 text-white font-bold text-xs shadow-lg shadow-blue-600/30 active:scale-95 transition-all hover:bg-blue-700" onclick="navigateToPage('page4')" type="button">
+                  즉시 예약
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <!-- Page 2 (Floor Plan) -->
+    <div id="page2" class="page-section w-full">
+      <div class="px-margin pt-3 flex flex-col gap-3">
+        <div class="bg-white rounded-3xl p-5 shadow-lg border border-slate-100 flex flex-col gap-4">
+          <div class="flex items-center justify-between pb-3 border-b border-slate-100">
+            <div>
+              <div class="flex items-center gap-1.5">
+                <h2 class="text-base font-extrabold text-slate-900" id="page2-title">강남 센트럴타워 지하주차장</h2>
+                <span class="material-symbols-outlined text-[18px] text-blue-600">verified</span>
+              </div>
+              <p class="text-xs text-slate-500 mt-0.5" id="floor-subtitle">실시간 B2층 주차 슬롯 점유 현황</p>
+            </div>
+            <div class="flex items-center gap-1 bg-slate-100 p-1 rounded-2xl text-xs font-bold">
+              <button id="floor-b1-btn" onclick="switchFloor('B1')" class="px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 transition-all" type="button">B1층</button>
+              <button id="floor-b2-btn" onclick="switchFloor('B2')" class="px-3 py-1 rounded-xl bg-white text-blue-600 shadow-sm transition-all" type="button">B2층</button>
+            </div>
+          </div>
+
+          <div class="grid grid-cols-4 gap-2">
+            <div class="bg-blue-50 border border-blue-100 rounded-2xl p-2.5 flex flex-col items-center justify-center">
+              <span class="text-[10px] text-blue-600 font-bold">전체</span>
+              <span class="text-base font-black text-blue-900" id="floor-total-count">16면</span>
+            </div>
+            <div class="bg-emerald-50 border border-emerald-100 rounded-2xl p-2.5 flex flex-col items-center justify-center">
+              <span class="text-[10px] text-emerald-600 font-bold">빈자리</span>
+              <span class="text-base font-black text-emerald-800" id="floor-vacant-count">7면</span>
+            </div>
+            <div class="bg-amber-50 border border-amber-100 rounded-2xl p-2.5 flex flex-col items-center justify-center">
+              <span class="text-[10px] text-amber-600 font-bold">전기차</span>
+              <span class="text-base font-black text-amber-800" id="floor-ev-count">3면</span>
+            </div>
+            <div class="bg-rose-50 border border-rose-100 rounded-2xl p-2.5 flex flex-col items-center justify-center">
+              <span class="text-[10px] text-rose-600 font-bold">점유중</span>
+              <span class="text-base font-black text-rose-800" id="floor-occupied-count">9면</span>
+            </div>
+          </div>
+
+          <div class="relative w-full bg-slate-900 rounded-3xl p-4 shadow-inner overflow-hidden border border-slate-800 select-none">
+            <div class="absolute inset-0 bg-[radial-gradient(#334155_1px,transparent_1px)] [background-size:16px_16px] opacity-40"></div>
+            <div id="parking-visual-grid" class="grid grid-cols-4 gap-2.5 my-2 relative z-10"></div>
+          </div>
+
+          <div class="bg-slate-900 text-white p-4 rounded-3xl flex flex-col gap-3 shadow-xl border border-slate-800">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="flex flex-col">
+                  <span class="text-[10px] font-extrabold text-blue-400 tracking-wider uppercase" id="selected-slot-zone-tag">구역 정보</span>
+                  <span class="text-base font-extrabold text-white" id="selected-spot-title">B2층 A-02 구역</span>
+                </div>
+              </div>
+              <div class="flex flex-col items-end">
+                <span class="text-xs text-slate-400 font-medium">예상 분당 요금</span>
+                <span class="text-lg font-black text-emerald-400" id="selected-slot-price">₩2,000 / 30분</span>
+              </div>
+            </div>
+            <div class="flex items-center gap-2 pt-1">
+              <button class="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs shadow-lg shadow-blue-600/40 active:scale-95 transition-all" onclick="navigateToPage('page4')" type="button">
+                이 슬롯 선점하기
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Page 3 (Shared Parking) -->
+    <div id="page3" class="page-section w-full">
+      
+      <!-- Top Tab Navigation -->
+      <div class="px-margin pt-3 pb-2 z-30 bg-surface">
+        <div class="flex bg-slate-100 p-1 rounded-2xl w-full">
+          <button id="tab-btn-driver" class="flex-1 py-2 rounded-xl bg-white text-blue-600 font-bold shadow-sm text-sm transition-all" onclick="switchShareTab('driver')">
+            운전자 <span class="font-normal text-xs text-slate-500 ml-1">(예약)</span>
+          </button>
+          <button id="tab-btn-host" class="flex-1 py-2 rounded-xl text-slate-500 font-medium text-sm transition-all hover:text-slate-700" onclick="switchShareTab('host')">
+            호스트 <span class="font-normal text-xs opacity-80 ml-1">(수익창출)</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- ================= DRIVER VIEW ================= -->
+      <div id="driver-view" class="flex flex-col w-full">
+        <div class="px-margin pt-2">
+          <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-blue-600 to-indigo-700 p-4 shadow-md text-white">
+            <div class="relative z-10 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-white">
+                  <span class="material-symbols-outlined text-[24px]">local_parking</span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-[10px] text-blue-200 uppercase font-bold tracking-wider">이웃 공유 주차장</span>
+                  <p class="text-xs font-medium truncate">주변 이웃이 공유한 저렴한 주차 공간</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-margin pt-4 pb-2 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-base font-bold text-slate-900">실시간 P2P 공유 주차면</span>
+            <span class="w-5 h-5 rounded-full bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">3</span>
+          </div>
+        </div>
+
+        <div class="px-margin flex flex-col gap-3 pb-8">
+          <!-- Item 1 -->
+          <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[11px] font-bold">P2P 거주자 지정</span>
+              <span class="text-xs text-emerald-600 font-bold">1,500원 / 시간</span>
+            </div>
+            <div class="flex gap-3 items-start">
+              <img class="w-20 h-20 rounded-2xl object-cover bg-slate-100 shrink-0" src="https://images.unsplash.com/photo-1506521781263-d8422e82f27a?w=300&auto=format&fit=crop&q=80" alt="주차장 이미지"/>
+              <div class="flex flex-col min-w-0">
+                <h3 class="text-sm font-bold text-slate-900 truncate">역삼동 래미안 빌라 102동 지정석</h3>
+                <p class="text-[11px] text-slate-500 truncate mt-0.5">서울 강남구 테헤란로28길 19-4 (도보 3분)</p>
+                <div class="flex items-center gap-1.5 mt-2">
+                  <span class="text-xs font-medium text-slate-700">김*민 호스트 ★ 4.9</span>
+                </div>
+              </div>
+            </div>
+            <button class="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md active:scale-95 transition-all" onclick="openBookingModal('spot-4')" type="button">
+              즉시 예약 신청하기
+            </button>
+          </div>
+
+          <!-- Item 2 -->
+          <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 text-[11px] font-bold">P2P 오피스 공유</span>
+              <span class="text-xs text-emerald-600 font-bold">1,800원 / 시간</span>
+            </div>
+            <div class="flex gap-3 items-start">
+              <img class="w-20 h-20 rounded-2xl object-cover bg-slate-100 shrink-0" src="https://images.unsplash.com/photo-1590674899484-d5640e854abe?w=300&auto=format&fit=crop&q=80" alt="주차장 이미지"/>
+              <div class="flex flex-col min-w-0">
+                <h3 class="text-sm font-bold text-slate-900 truncate">테헤란로 포스코타워 민간 공유</h3>
+                <p class="text-[11px] text-slate-500 truncate mt-0.5">서울 강남구 테헤란로 134 (도보 7분)</p>
+                <div class="flex items-center gap-1.5 mt-2">
+                  <span class="text-xs font-medium text-slate-700">포스코타워 파트너 ★ 4.8</span>
+                </div>
+              </div>
+            </div>
+            <button class="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md active:scale-95 transition-all" onclick="openBookingModal('spot-8')" type="button">
+              즉시 예약 신청하기
+            </button>
+          </div>
+
+          <!-- Item 3 -->
+          <div class="bg-white rounded-3xl p-4 shadow-sm border border-slate-100 flex flex-col gap-3 relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <span class="px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[11px] font-bold">P2P 주말 나눔</span>
+              <span class="text-xs text-emerald-600 font-bold">1,200원 / 시간</span>
+            </div>
+            <div class="flex gap-3 items-start">
+              <img class="w-20 h-20 rounded-2xl object-cover bg-slate-100 shrink-0" src="https://images.unsplash.com/photo-1573348722427-f1d6819fdf98?w=300&auto=format&fit=crop&q=80" alt="주차장 이미지"/>
+              <div class="flex flex-col min-w-0">
+                <h3 class="text-sm font-bold text-slate-900 truncate">서초 푸르지오 P2P 나눔주차장</h3>
+                <p class="text-[11px] text-slate-500 truncate mt-0.5">서울 서초구 사임당로 143 (도보 8분)</p>
+                <div class="flex items-center gap-1.5 mt-2">
+                  <span class="text-xs font-medium text-slate-700">이*진 호스트 ★ 5.0</span>
+                </div>
+              </div>
+            </div>
+            <button class="w-full py-2.5 rounded-xl bg-blue-600 text-white font-bold text-xs shadow-md active:scale-95 transition-all" onclick="openBookingModal('spot-9')" type="button">
+              즉시 예약 신청하기
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= HOST VIEW ================= -->
+      <div id="host-view" class="hidden flex-col w-full pb-8">
+        
+        <!-- Registration Banner -->
+        <div class="px-margin pt-2">
+          <div class="relative overflow-hidden rounded-3xl bg-gradient-to-r from-amber-500 to-amber-700 p-4 shadow-md text-white">
+            <div class="relative z-10 flex items-center justify-between gap-3">
+              <div class="flex items-center gap-3 min-w-0">
+                <div class="w-10 h-10 rounded-2xl bg-white/20 backdrop-blur-md flex items-center justify-center shrink-0 text-white">
+                  <span class="material-symbols-outlined text-[24px]">savings</span>
+                </div>
+                <div class="flex flex-col min-w-0">
+                  <span class="text-[10px] text-amber-200 uppercase font-bold tracking-wider">이웃 상생 재테크</span>
+                  <p class="text-xs font-medium truncate">비어있는 내 주차면, 이웃과 공유하세요!</p>
+                </div>
+              </div>
+              <button class="shrink-0 px-3.5 py-2 rounded-xl bg-white text-amber-800 font-bold text-xs flex items-center gap-1 active:scale-95 transition-transform shadow-sm" type="button" onclick="openHostModal()">
+                <span>호스트 등록</span>
+                <span class="material-symbols-outlined text-[14px]">arrow_forward</span>
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div class="px-margin pt-4 flex flex-col gap-4">
+          
+          <!-- 1. Interactive Timeline Slider -->
+          <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-amber-500 text-[18px]">timelapse</span>
+                공유 가능 시간 설정
+              </h3>
+              <span class="text-xs font-bold text-amber-600 bg-amber-50 px-2 py-1 rounded-lg" id="timeline-hours-display">총 9시간</span>
+            </div>
+            
+            <p class="text-xs text-slate-500">슬라이더를 양쪽으로 당겨 공유할 시간을 선택하세요.</p>
+
+            <div class="pt-6 pb-2 px-2 relative">
+              <!-- Custom Dual Range Visual -->
+              <div class="dual-range">
+                <!-- Visual Background Track -->
+                <div class="absolute w-full h-2 bg-slate-100 rounded-full top-0"></div>
+                <!-- Visual Active Track -->
+                <div id="slider-active-track" class="absolute h-2 bg-gradient-to-r from-amber-400 to-amber-500 rounded-full top-0" style="left: 37.5%; right: 25%;"></div>
+                
+                <input type="range" min="0" max="24" value="9" id="slider-min" oninput="updateTimeline()">
+                <input type="range" min="0" max="24" value="18" id="slider-max" oninput="updateTimeline()">
+              </div>
+              
+              <div class="flex justify-between text-[10px] font-bold text-slate-400 mt-4 px-1 select-none">
+                <span>00:00</span>
+                <span>06:00</span>
+                <span>12:00</span>
+                <span>18:00</span>
+                <span>24:00</span>
+              </div>
+            </div>
+
+            <div class="bg-slate-50 rounded-xl p-3 flex justify-center items-center">
+              <span class="text-lg font-black text-slate-800" id="timeline-text-display">09:00 ~ 18:00</span>
+            </div>
+          </div>
+
+          <!-- 2. Drag & Drop Profit Calculator -->
+          <div class="bg-white rounded-3xl p-5 shadow-sm border border-slate-100 flex flex-col gap-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-extrabold text-slate-900 flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-emerald-500 text-[18px]">calculate</span>
+                예상 수익 계산기
+              </h3>
+              <button class="text-[11px] text-slate-400 hover:text-slate-600 font-medium flex items-center gap-0.5" onclick="resetCalculator()">
+                <span class="material-symbols-outlined text-[14px]">refresh</span> 초기화
+              </button>
+            </div>
+            
+            <p class="text-[11px] text-slate-500">주차 수요 블록을 아래 내 주차면으로 <strong class="text-slate-700">드래그 앤 드롭</strong> (또는 클릭) 하여 하루 예상 수익을 계산해보세요.</p>
+
+            <!-- Draggable Items Container -->
+            <div class="flex gap-2 overflow-x-auto pb-2 no-scrollbar" id="draggable-items-container">
+              <!-- Item 1 -->
+              <div class="drag-item flex-shrink-0 bg-white border border-blue-200 shadow-sm rounded-xl px-3 py-2 flex items-center gap-2" 
+                   draggable="true" data-hours="1" data-price="1500" data-label="1시간 방문" 
+                   ondragstart="dragStart(event)" onclick="clickToAddItem(this)">
+                <div class="w-6 h-6 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[14px]">schedule</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-slate-800">1시간 방문</span>
+                  <span class="text-[10px] text-blue-600 font-extrabold">+1,500원</span>
+                </div>
+              </div>
+
+              <!-- Item 2 -->
+              <div class="drag-item flex-shrink-0 bg-white border border-indigo-200 shadow-sm rounded-xl px-3 py-2 flex items-center gap-2" 
+                   draggable="true" data-hours="3" data-price="4000" data-label="3시간 업무" 
+                   ondragstart="dragStart(event)" onclick="clickToAddItem(this)">
+                <div class="w-6 h-6 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[14px]">work</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-slate-800">3시간 업무</span>
+                  <span class="text-[10px] text-indigo-600 font-extrabold">+4,000원</span>
+                </div>
+              </div>
+
+              <!-- Item 3 -->
+              <div class="drag-item flex-shrink-0 bg-white border border-purple-200 shadow-sm rounded-xl px-3 py-2 flex items-center gap-2" 
+                   draggable="true" data-hours="8" data-price="10000" data-label="종일 주차" 
+                   ondragstart="dragStart(event)" onclick="clickToAddItem(this)">
+                <div class="w-6 h-6 rounded-full bg-purple-50 text-purple-600 flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[14px]">sunny</span>
+                </div>
+                <div class="flex flex-col">
+                  <span class="text-xs font-bold text-slate-800">종일 주차</span>
+                  <span class="text-[10px] text-purple-600 font-extrabold">+10,000원</span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Drop Zone (My Parking Slot) -->
+            <div id="profit-dropzone" class="drop-zone w-full h-36 bg-slate-50 border-2 border-dashed border-slate-300 rounded-2xl flex flex-col items-center justify-center relative overflow-hidden"
+                 ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="drop(event)">
+              
+              <div id="dropzone-placeholder" class="flex flex-col items-center justify-center text-slate-400 pointer-events-none">
+                <span class="material-symbols-outlined text-[32px] mb-1">download</span>
+                <span class="text-xs font-medium">여기에 블록을 놓으세요</span>
+              </div>
+
+              <!-- Dropped items will appear here -->
+              <div id="dropped-items-container" class="absolute inset-2 flex flex-wrap content-start gap-2 overflow-y-auto pointer-events-none"></div>
+            </div>
+
+            <!-- Total Result -->
+            <div class="bg-gradient-to-r from-emerald-50 to-teal-50 rounded-2xl p-4 flex items-center justify-between border border-emerald-100">
+              <div class="flex flex-col">
+                <span class="text-[11px] text-emerald-700 font-bold">하루 예상 총 수익</span>
+                <span class="text-[10px] text-emerald-600" id="calc-hours-display">총 0시간 점유</span>
+              </div>
+              <div class="flex items-baseline gap-1">
+                <span class="text-2xl font-black text-emerald-600" id="calc-total-profit">0</span>
+                <span class="text-sm font-bold text-emerald-700">원</span>
+              </div>
+            </div>
+
+          </div>
+
+        </div>
+      </div>
+      <!-- ================= END HOST VIEW ================= -->
+
+    </div>
+
+    <!-- Page 4 (Active Parking) -->
+    <div id="page4" class="page-section w-full">
+      <div class="flex flex-col w-full px-margin pt-3 gap-3">
+        <div class="bg-gradient-to-br from-blue-700 to-blue-900 text-white rounded-3xl p-5 shadow-xl flex flex-col gap-3 relative overflow-hidden">
+          <div class="flex items-center justify-between">
+            <span class="px-2.5 py-0.5 rounded-full bg-emerald-400 text-emerald-950 text-[10px] font-extrabold">이용 중 (Active)</span>
+            <span class="text-[11px] text-blue-200">입차 14:20 • 현재 38분 경과</span>
+          </div>
+          <div class="flex flex-col mt-1">
+            <h2 class="text-xl font-bold" id="my-parking-title">강남 센트럴타워 지하주차장</h2>
+            <p class="text-xs text-blue-200 flex items-center gap-1 mt-0.5">
+              <span class="material-symbols-outlined text-[16px]">pin_drop</span>
+              <span id="reservation-slot-display">B2층 A-02 지정 구역</span>
+            </p>
+          </div>
+          <div class="bg-white/10 backdrop-blur-md rounded-2xl p-3.5 flex items-center justify-between border border-white/15">
+            <div class="flex flex-col">
+              <span class="text-[10px] text-blue-200">자동 정산 예정 금액</span>
+              <span class="text-xl font-bold text-white">₩3,200</span>
+            </div>
+            <button class="px-3.5 py-2 rounded-xl bg-white text-blue-700 font-bold text-xs shadow-sm active:scale-95 transition-transform" type="button">모바일 출차 QR</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+
+  <nav class="fixed bottom-0 inset-x-0 z-40 pb-safe bg-white/90 backdrop-blur-2xl shadow-[0_-4px_24px_rgba(19,27,46,0.08)] border-t border-slate-100">
+    <div class="flex items-center justify-around h-16 px-1">
+      <a class="group flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors text-blue-600" data-page="page1" href="#page1" onclick="navigateToPage('page1'); return false;">
+        <span class="material-symbols-outlined text-[24px] group-hover:scale-105 transition-transform">near_me</span>
+        <span class="text-[11px] leading-tight font-medium">주차 탐색</span>
+      </a>
+      <a class="group flex flex-col items-center justify-center flex-1 h-full gap-0.5 text-slate-500 hover:text-slate-900 transition-colors" data-page="page2" href="#page2" onclick="navigateToPage('page2'); return false;">
+        <span class="material-symbols-outlined text-[24px] group-hover:scale-105 transition-transform">grid_view</span>
+        <span class="text-[11px] leading-tight font-medium">슬롯 현황</span>
+      </a>
+      <a class="group flex flex-col items-center justify-center flex-1 h-full gap-0.5 text-slate-500 hover:text-slate-900 transition-colors" data-page="page3" href="#page3" onclick="navigateToPage('page3'); return false;">
+        <span class="material-symbols-outlined text-[24px] group-hover:scale-105 transition-transform">handshake</span>
+        <span class="text-[11px] leading-tight font-medium">공유 주차</span>
+      </a>
+      <a class="group flex flex-col items-center justify-center flex-1 h-full gap-0.5 text-slate-500 hover:text-slate-900 transition-colors" data-page="page4" href="#page4" onclick="navigateToPage('page4'); return false;">
+        <span class="material-symbols-outlined text-[24px] group-hover:scale-105 transition-transform">schedule</span>
+        <span class="text-[11px] leading-tight font-medium">내 주차</span>
+      </a>
+    </div>
+  </nav>
+
+  <!-- Modals (Booking) -->
+  <div id="booking-modal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeBookingModal()"></div>
+    <div class="relative bg-white w-full sm:w-[400px] rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up pb-safe flex flex-col max-h-[90vh]">
+      <div class="w-full flex justify-center pt-3 pb-1 sm:hidden" onclick="closeBookingModal()"><div class="w-12 h-1.5 bg-slate-200 rounded-full"></div></div>
+      <div class="px-5 pb-2 pt-2 sm:pt-5 flex items-center justify-between border-b border-slate-100">
+        <h3 class="text-lg font-black text-slate-900 tracking-tight">예약 및 결제</h3>
+        <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors" onclick="closeBookingModal()"><span class="material-symbols-outlined text-[20px]">close</span></button>
+      </div>
+      <div class="p-5 flex flex-col gap-4 overflow-y-auto no-scrollbar">
+        <div class="flex gap-3 items-start">
+          <div class="w-16 h-16 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600 shrink-0"><span class="material-symbols-outlined text-[32px]">local_parking</span></div>
+          <div class="flex flex-col flex-1 min-w-0">
+            <span class="text-[10px] text-blue-600 font-extrabold bg-blue-50 px-2 py-0.5 rounded-full w-max mb-1" id="bm-tag">P2P 공유</span>
+            <h4 class="text-base font-bold text-slate-900 truncate" id="bm-title">주차장 이름</h4>
+            <p class="text-[11px] text-slate-500 truncate mt-0.5" id="bm-address">주소 정보</p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-2 pt-2">
+          <div class="flex items-center justify-between text-xs text-slate-500">
+            <span>주차 요금 (시간당 <span id="bm-rate">1,500</span>원)</span>
+            <span class="font-medium text-slate-700" id="bm-subtotal">3,000원</span>
+          </div>
+          <div class="flex items-center justify-between text-lg font-black text-slate-900 pt-2 border-t border-slate-100 mt-1">
+            <span>최종 결제 금액</span>
+            <span class="text-blue-600" id="bm-total">2,500원</span>
+          </div>
+        </div>
+      </div>
+      <div class="p-5 pt-0 border-t border-slate-50 mt-auto bg-white rounded-b-3xl">
+        <button id="bm-pay-btn" class="w-full py-3.5 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2" onclick="confirmBooking()"><span>결제 및 예약 확정하기</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2. Host Registration Modal -->
+  <div id="host-modal" class="fixed inset-0 z-50 hidden items-end sm:items-center justify-center">
+    <div class="absolute inset-0 bg-slate-900/60 backdrop-blur-sm transition-opacity" onclick="closeHostModal()"></div>
+    <div class="relative bg-white w-full sm:w-[450px] h-[85vh] sm:h-auto rounded-t-3xl sm:rounded-3xl shadow-2xl animate-slide-up pb-safe flex flex-col">
+      <div class="w-full flex justify-center pt-3 pb-1 sm:hidden" onclick="closeHostModal()">
+        <div class="w-12 h-1.5 bg-slate-200 rounded-full"></div>
+      </div>
+      <div class="px-5 pb-3 pt-2 sm:pt-5 flex items-center justify-between border-b border-slate-100 shrink-0">
+        <div class="flex flex-col">
+          <h3 class="text-lg font-black text-slate-900 tracking-tight">내 주차면 공유하기</h3>
+          <span class="text-[11px] text-slate-500">호스트로 등록하고 부가 수익을 창출하세요.</span>
+        </div>
+        <button class="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors" onclick="closeHostModal()">
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <div class="p-5 flex flex-col gap-5 overflow-y-auto no-scrollbar flex-1">
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700">주차면 주소</label>
+          <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus-within:border-blue-500 transition-colors">
+            <span class="material-symbols-outlined text-slate-400 mr-2 text-[20px]">search</span>
+            <input type="text" placeholder="도로명 또는 지번 주소 검색" class="w-full bg-transparent text-sm text-slate-900 outline-none placeholder:text-slate-400"/>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700">주차 공간 유형</label>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="border border-blue-600 bg-blue-50 text-blue-700 rounded-xl py-2 flex items-center justify-center text-xs font-bold cursor-pointer">빌라/다세대</div>
+            <div class="border border-slate-200 bg-white text-slate-600 rounded-xl py-2 flex items-center justify-center text-xs font-medium cursor-pointer hover:bg-slate-50">아파트 지정석</div>
+            <div class="border border-slate-200 bg-white text-slate-600 rounded-xl py-2 flex items-center justify-center text-xs font-medium cursor-pointer hover:bg-slate-50">오피스/상가</div>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700 flex items-center justify-between">
+            <span>공유 가능 요일 및 시간</span>
+            <span class="text-blue-600 text-[10px] bg-blue-50 px-2 py-0.5 rounded-full cursor-pointer">+ 일정 추가</span>
+          </label>
+          <div class="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2">
+            <div class="flex items-center justify-between text-sm">
+              <span class="font-medium text-slate-700">평일 (월~금)</span>
+              <span class="font-bold text-slate-900">09:00 ~ 18:00</span>
+            </div>
+            <p class="text-[10px] text-slate-500">출근 시간대에 빈 자리를 공유합니다.</p>
+          </div>
+        </div>
+        <div class="flex flex-col gap-1.5">
+          <label class="text-xs font-bold text-slate-700">희망 시간당 요금</label>
+          <div class="flex items-center bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 focus-within:border-blue-500 transition-colors">
+            <input type="number" placeholder="예: 1500" value="1500" class="w-full bg-transparent text-sm text-slate-900 outline-none text-right font-bold"/>
+            <span class="text-slate-500 text-sm ml-1 font-medium">원 / 시간</span>
+          </div>
+          <p class="text-[10px] text-emerald-600 font-medium">주변 시세 대비 적정한 가격입니다.</p>
+        </div>
+      </div>
+      <div class="p-5 pt-3 border-t border-slate-50 bg-white rounded-b-3xl shrink-0">
+        <button id="host-submit-btn" class="w-full py-3.5 rounded-2xl bg-amber-600 text-white font-bold text-[15px] shadow-lg shadow-amber-600/30 active:scale-95 transition-all flex items-center justify-center gap-2" onclick="submitHost()">
+          <span class="material-symbols-outlined text-[20px]">verified</span>
+          <span>호스트 등록 신청하기</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    /* User Start Position (Gangnam Station Exit 12) */
+    const USER_LOCATION = { lat: 37.4979, lng: 127.0276 };
+
+    /* Subtitle titles for header */
+    const subtitles = {
+      page1: '강남역 · 테헤란로 · 역삼역',
+      page2: 'B2층 실시간 파킹 슬롯 스마트 뷰',
+      page3: '이웃과 공유하는 스마트 P2P 주차',
+      page4: '내 예약 및 등록 차량 관리'
+    };
+
+    /* Detailed Slot Floor Plan Mock Data Engine for Page 2 */
+    const floorPlanSlots = {
+      'B2': [
+        { code: 'A-01', zone: 'A', status: 'occupied', type: 'standard', carIcon: 'directions_car', carColor: 'text-slate-400', label: '주차중' },
+        { code: 'A-02', zone: 'A', status: 'selected', type: 'standard', carIcon: 'directions_car', carColor: 'text-blue-200', label: '선택됨' },
+        { code: 'A-03', zone: 'A', status: 'vacant', type: 'standard', carIcon: 'local_parking', carColor: 'text-emerald-500', label: '빈자리' },
+        { code: 'A-04', zone: 'A', status: 'occupied', type: 'standard', carIcon: 'airport_shuttle', carColor: 'text-slate-400', label: '주차중' },
+        { code: 'B-01', zone: 'B', status: 'vacant', type: 'ev', carIcon: 'electric_car', carColor: 'text-amber-400', label: 'EV 충전' },
+        { code: 'B-02', zone: 'B', status: 'occupied', type: 'ev', carIcon: 'electric_car', carColor: 'text-slate-400', label: 'EV 점유' },
+        { code: 'B-03', zone: 'B', status: 'vacant', type: 'ev', carIcon: 'electric_car', carColor: 'text-amber-400', label: 'EV 충전' },
+        { code: 'B-04', zone: 'B', status: 'occupied', type: 'standard', carIcon: 'directions_car', carColor: 'text-slate-400', label: '주차중' },
+        { code: 'C-01', zone: 'C', status: 'vacant', type: 'priority', carIcon: 'accessible', carColor: 'text-emerald-500', label: '배려석' },
+        { code: 'C-02', zone: 'C', status: 'vacant', type: 'standard', carIcon: 'local_parking', carColor: 'text-emerald-500', label: '빈자리' },
+        { code: 'C-03', zone: 'C', status: 'occupied', type: 'standard', carIcon: 'directions_car', carColor: 'text-slate-400', label: '주차중' },
+        { code: 'C-04', zone: 'C', status: 'occupied', type: 'standard', carIcon: 'directions_car', carColor: 'text-slate-400', label: '주차중' }
+      ]
+    };
+
+    let currentFloor = 'B2';
+    let activeSelectedSlotCode = 'A-02';
+    let map = null;
+    let activeMarker = null;
+    let routePolyline = null;
+    let isRouteOn = false;
+
+    /* Parking spots list for Mock Data (Expanded) */
+    const parkingSpots = [
+      { id: 'spot-1', name: '강남 센트럴타워 지하주차장', price: '₩2,000', unit: '/ 30분', category: 'private', tag: '추천 최저가', subtext: '서울 강남구 테헤란로 105', vacancy: '여유 24석', total: '총 150면', walk: '도보 2분', position: {lat: 37.4985, lng: 127.0288} },
+      { id: 'spot-2', name: '메리츠타워 공영 주차장', price: '₩1,800', unit: '/ 30분', category: 'public', tag: '공영 할인', subtext: '서울 강남구 강남대로 382', vacancy: '혼잡 5석', total: '총 200면', walk: '도보 4분', position: {lat: 37.4990, lng: 127.0295} },
+      { id: 'spot-3', name: '국기원 하단 노상 공영', price: '₩1,000', unit: '/ 30분', category: 'public', tag: '노상 공영', subtext: '서울 강남구 테헤란로7길 32', vacancy: '여유 12석', total: '총 40면', walk: '도보 6분', position: {lat: 37.4995, lng: 127.0305} },
+      { id: 'spot-4', name: '역삼동 래미안 빌라 P2P 지정석', price: '₩1,500', unit: '/ 1시간', numericRate: 1500, category: 'p2p', subtext: '서울 강남구 테헤란로28길 19-4', tag: 'P2P 거주자', vacancy: '여유 1석', total: '총 1면', walk: '도보 7분', position: {lat: 37.5002, lng: 127.0265} },
+      { id: 'spot-5', name: '교보타워 사거리 민영 주차장', price: '₩2,500', unit: '/ 30분', category: 'private', tag: '대형 주차장', subtext: '서울 서초구 강남대로 465', vacancy: '여유 50석', total: '총 300면', walk: '도보 9분', position: {lat: 37.5030, lng: 127.0245} },
+      { id: 'spot-6', name: '강남역 8번출구 타워 주차장', price: '₩3,000', unit: '/ 30분', category: 'private', tag: '기계식 타워', subtext: '서울 서초구 서초대로77길 13', vacancy: '혼잡 2석', total: '총 80면', walk: '도보 1분', position: {lat: 37.4975, lng: 127.0260} },
+      { id: 'spot-7', name: '우성아파트 사거리 주차빌딩', price: '₩1,500', unit: '/ 30분', category: 'private', tag: '건물 주차', subtext: '서울 강남구 강남대로 334', vacancy: '혼잡 2석', total: '총 120면', walk: '도보 8분', position: {lat: 37.4950, lng: 127.0285} },
+      { id: 'spot-8', name: '테헤란로 포스코타워 민간 공유', price: '₩1,800', unit: '/ 1시간', numericRate: 1800, category: 'p2p', subtext: '서울 강남구 테헤란로 134', tag: 'P2P 오피스', vacancy: '여유 4석', total: '총 5면', walk: '도보 7분', position: {lat: 37.4968, lng: 127.0312} },
+      { id: 'spot-9', name: '서초 푸르지오 P2P 나눔 주차장', price: '₩1,200', unit: '/ 1시간', numericRate: 1200, category: 'p2p', subtext: '서울 서초구 사임당로 143', tag: 'P2P 주말나눔', vacancy: '혼잡 0석', total: '총 2면', walk: '도보 8분', position: {lat: 37.4955, lng: 127.0250} },
+      { id: 'spot-10', name: '서초초등학교 옆 공유 지정석', price: '₩1,000', unit: '/ 1시간', numericRate: 1000, category: 'p2p', subtext: '서울 서초구 서초대로74길 33', tag: 'P2P 거주자', vacancy: '여유 1석', total: '총 1면', walk: '도보 4분', position: {lat: 37.4982, lng: 127.0245} }
+    ];
+
+    function initMap() {
+      const canvas = document.getElementById('google-map-canvas');
+      if(canvas) {
+        map = new google.maps.Map(canvas, {
+          center: USER_LOCATION,
+          zoom: 15,
+          disableDefaultUI: true,
+          styles: [{ "featureType": "poi", "elementType": "labels", "stylers": [{ "visibility": "off" }] }]
+        });
+
+        new google.maps.Marker({
+          position: USER_LOCATION, map: map,
+          icon: { path: google.maps.SymbolPath.CIRCLE, scale: 8, fillColor: '#3b82f6', fillOpacity: 1, strokeWeight: 3, strokeColor: '#ffffff' },
+          zIndex: 999
+        });
+
+        parkingSpots.forEach(spot => {
+          if(spot.position) {
+            const isP2P = spot.category === 'p2p';
+            
+            // 1. 혼잡도 기반 마커 색상 설정
+            let markerColor = '#10b981'; // 기본 색상: 초록 (여유)
+            if (spot.vacancy && spot.vacancy.includes('혼잡')) {
+                markerColor = '#f43f5e'; // 혼잡일 경우: 빨강
+            }
+
+            // 2. 카테고리 기반 마커 도형 설정
+            let svgPath = 'M 0,0 C -5,-18 -15,-22 -15,-34 A 15,15 0 1,1 15,-34 C 15,-22 5,-18 0,0 z'; // 기본 물방울 모양
+            let labelYOffset = -34;
+            
+            if (isP2P) {
+                // P2P 공유 주차장: 다이아몬드/육각형 형태의 도형
+                svgPath = 'M 0,0 L -12,-16 L -20,-28 L -10,-42 L 10,-42 L 20,-28 L 12,-16 z';
+                labelYOffset = -28;
+            }
+
+            const marker = new google.maps.Marker({
+              position: spot.position, map: map, title: spot.name,
+              icon: {
+                path: svgPath,
+                fillColor: markerColor, 
+                fillOpacity: 1, 
+                strokeColor: '#ffffff', 
+                strokeWeight: 2.5, 
+                scale: 1.1, 
+                labelOrigin: new google.maps.Point(0, labelYOffset)
+              },
+              label: { text: spot.price.replace('₩', ''), color: '#ffffff', fontSize: '11px', fontWeight: '800' },
+              animation: google.maps.Animation.DROP
+            });
+
+            // 마커 인스턴스를 데이터 객체에 저장하여 필터링 시 제어할 수 있도록 함
+            spot.marker = marker;
+
+            marker.addListener('click', () => {
+              if (activeMarker) activeMarker.setAnimation(null);
+              marker.setAnimation(google.maps.Animation.BOUNCE);
+              setTimeout(() => { marker.setAnimation(null); }, 1400);
+              activeMarker = marker;
+              drawRouteTo(spot.position);
+              updateBottomCard(spot);
+            });
+          }
+        });
+      }
+    }
+
+    function drawRouteTo(destination) {
+      if (!map) return;
+      if (routePolyline) routePolyline.setMap(null);
+      
+      // 가상의 L자(맨해튼 거리) 기반 도로망 경로를 생성합니다.
+      const path = [ 
+        USER_LOCATION, 
+        { lat: USER_LOCATION.lat, lng: destination.lng }, 
+        destination 
+      ];
+      
+      routePolyline = new google.maps.Polyline({ 
+        path: path, 
+        geodesic: true, 
+        strokeColor: '#3b82f6', 
+        strokeOpacity: 0.8, 
+        strokeWeight: 6, 
+        map: map, 
+        strokeLinejoin: 'round' 
+      });
+
+      const bounds = new google.maps.LatLngBounds();
+      bounds.extend(USER_LOCATION); 
+      bounds.extend(destination);
+      map.fitBounds(bounds, { padding: 40 });
+      
+      const btn = document.getElementById('route-btn');
+      if (btn) { 
+        btn.innerText = '경로 안내중'; 
+        btn.classList.remove('bg-blue-600', 'border-blue-500'); 
+        btn.classList.add('bg-indigo-600', 'border-indigo-500'); 
+        isRouteOn = true; 
+      }
+      
+      const indicator = document.getElementById('route-indicator');
+      if (indicator) indicator.classList.remove('hidden');
+    }
+
+    function updateBottomCard(spot) {
+      const cardTitle = document.getElementById('card-title');
+      if(!cardTitle) return; 
+      const card = cardTitle.closest('.bg-white.rounded-3xl.p-4');
+      card.classList.add('scale-[0.98]', 'opacity-80', 'transition-all', 'duration-200');
+      
+      setTimeout(() => {
+        document.getElementById('card-title').innerText = spot.name;
+        document.getElementById('card-subtext').innerText = spot.subtext || '상세 주소 정보 없음';
+        document.getElementById('card-price').innerText = spot.price;
+        document.getElementById('card-unit').innerText = spot.unit;
+        
+        const vacancyEl = document.getElementById('card-vacancy'); if(vacancyEl) vacancyEl.innerText = spot.vacancy || '정보없음';
+        const totalEl = document.getElementById('card-total'); if(totalEl) totalEl.innerText = spot.total || '정보없음';
+        const walkEl = document.getElementById('card-walk'); if(walkEl) walkEl.innerText = spot.walk || '도보 -분';
+
+        const tagEl = document.getElementById('card-tag');
+        if(tagEl) {
+            tagEl.innerText = spot.tag || '주차장';
+            if (spot.category === 'p2p') { tagEl.className = "px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-extrabold uppercase tracking-wider"; }
+            else if (spot.category === 'public') { tagEl.className = "px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-700 text-[10px] font-extrabold uppercase tracking-wider"; }
+            else { tagEl.className = "px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 text-[10px] font-extrabold uppercase tracking-wider"; }
+        }
+        card.classList.remove('scale-[0.98]', 'opacity-80');
+      }, 150);
+    }
+
+    /* Modal Controls */
+    let currentlyBookingSpot = null;
+    function openBookingModal(spotId) {
+      const modal = document.getElementById('booking-modal');
+      const spot = parkingSpots.find(s => s.id === spotId);
+      if(spot) {
+        currentlyBookingSpot = spot;
+        document.getElementById('bm-title').innerText = spot.name;
+        document.getElementById('bm-address').innerText = spot.subtext || '상세 주소 정보';
+        if(document.getElementById('bm-tag')) document.getElementById('bm-tag').innerText = spot.tag || '공유 주차';
+        const rate = spot.numericRate || 1500;
+        document.getElementById('bm-rate').innerText = rate.toLocaleString();
+        const subtotal = rate * 2; const total = subtotal - 500;
+        document.getElementById('bm-subtotal').innerText = subtotal.toLocaleString() + '원';
+        document.getElementById('bm-total').innerText = total.toLocaleString() + '원';
+        const btn = document.getElementById('bm-pay-btn');
+        if(btn) { btn.innerHTML = `<span>결제 및 예약 확정하기</span>`; btn.disabled = false; btn.className = "w-full py-3.5 rounded-2xl bg-blue-600 text-white font-bold text-[15px] shadow-lg shadow-blue-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"; }
+      }
+      if(modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+    }
+    function closeBookingModal() { const modal = document.getElementById('booking-modal'); if(modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); } }
+    function confirmBooking() {
+      const btn = document.getElementById('bm-pay-btn');
+      if(!btn) return;
+      btn.innerHTML = `<span class="material-symbols-outlined animate-spin">sync</span><span>결제 처리 중...</span>`; btn.disabled = true;
+      setTimeout(() => {
+        btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span><span>결제 및 예약 완료!</span>`;
+        if(currentlyBookingSpot) {
+            const titleEl = document.getElementById('my-parking-title'); if(titleEl) titleEl.innerText = currentlyBookingSpot.name;
+            const resEl = document.getElementById('reservation-slot-display'); if(resEl) resEl.innerText = currentlyBookingSpot.tag + ' 예약 완료';
+        }
+        setTimeout(() => { closeBookingModal(); navigateToPage('page4'); }, 800);
+      }, 1000);
+    }
+    function openHostModal() {
+      const modal = document.getElementById('host-modal');
+      if(modal) { modal.classList.remove('hidden'); modal.classList.add('flex'); }
+      const btn = document.getElementById('host-submit-btn');
+      if(btn) { btn.innerHTML = `<span class="material-symbols-outlined text-[20px]">verified</span><span>호스트 등록 신청하기</span>`; btn.disabled = false; btn.className = "w-full py-3.5 rounded-2xl bg-amber-600 text-white font-bold text-[15px] shadow-lg shadow-amber-600/30 active:scale-95 transition-all flex items-center justify-center gap-2"; }
+    }
+    function closeHostModal() { const modal = document.getElementById('host-modal'); if(modal) { modal.classList.add('hidden'); modal.classList.remove('flex'); } }
+    function submitHost() {
+      const btn = document.getElementById('host-submit-btn'); if(!btn) return;
+      btn.innerHTML = `<span class="material-symbols-outlined animate-spin">sync</span><span>정보 전송 중...</span>`; btn.classList.replace('bg-amber-600', 'bg-amber-400'); btn.disabled = true;
+      setTimeout(() => { btn.innerHTML = `<span class="material-symbols-outlined">check_circle</span><span>등록 신청 완료!</span>`; btn.classList.replace('bg-amber-400', 'bg-emerald-500'); btn.classList.replace('shadow-amber-600/30', 'shadow-emerald-500/30'); setTimeout(() => { closeHostModal(); }, 1000); }, 1200);
+    }
+
+    /* Core Navigation */
+    function navigateToPage(pageId) {
+      document.querySelectorAll('.page-section').forEach(sec => sec.classList.remove('active'));
+      const targetPage = document.getElementById(pageId); if (targetPage) targetPage.classList.add('active');
+      const subtitleEl = document.getElementById('header-subtitle'); if (subtitleEl && subtitles[pageId]) subtitleEl.innerText = subtitles[pageId];
+      document.querySelectorAll('nav a').forEach(link => {
+        if (link.getAttribute('data-page') === pageId) { link.className = "group flex flex-col items-center justify-center flex-1 h-full gap-0.5 transition-colors text-blue-600"; }
+        else { link.className = "group flex flex-col items-center justify-center flex-1 h-full gap-0.5 text-slate-500 hover:text-slate-900 transition-colors"; }
+      });
+      window.scrollTo(0, 0);
+      if(pageId === 'page3') updateTimeline();
+    }
+    window.addEventListener('load', () => { const hash = location.hash.replace('#', ''); if (hash && ['page1', 'page2', 'page3', 'page4'].includes(hash)) { navigateToPage(hash); } else { navigateToPage('page1'); } renderFloorPlan(currentFloor); });
+
+    /* Page 2 Floor Logic */
+    function switchFloor(floor) {
+      currentFloor = floor;
+      const b1Btn = document.getElementById('floor-b1-btn'); const b2Btn = document.getElementById('floor-b2-btn');
+      if (floor === 'B1') {
+        if(b1Btn) b1Btn.className = "px-3 py-1 rounded-xl bg-white text-blue-600 shadow-sm transition-all"; if(b2Btn) b2Btn.className = "px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 transition-all";
+        if(document.getElementById('floor-total-count')) document.getElementById('floor-total-count').innerText = "0면"; if(document.getElementById('floor-vacant-count')) document.getElementById('floor-vacant-count').innerText = "0면";
+        if(document.getElementById('floor-ev-count')) document.getElementById('floor-ev-count').innerText = "0면"; if(document.getElementById('floor-occupied-count')) document.getElementById('floor-occupied-count').innerText = "0면";
+      } else {
+        if(b1Btn) b1Btn.className = "px-3 py-1 rounded-xl text-slate-600 hover:text-slate-900 transition-all"; if(b2Btn) b2Btn.className = "px-3 py-1 rounded-xl bg-white text-blue-600 shadow-sm transition-all";
+        if(document.getElementById('floor-total-count')) document.getElementById('floor-total-count').innerText = "16면"; if(document.getElementById('floor-vacant-count')) document.getElementById('floor-vacant-count').innerText = "7면";
+        if(document.getElementById('floor-ev-count')) document.getElementById('floor-ev-count').innerText = "3면"; if(document.getElementById('floor-occupied-count')) document.getElementById('floor-occupied-count').innerText = "9면";
+      }
+      renderFloorPlan(floor);
+    }
+    function renderFloorPlan(floor) {
+      const grid = document.getElementById('parking-visual-grid'); if(!grid) return;
+      const slots = floorPlanSlots[floor] || [];
+      if (slots.length === 0) { grid.innerHTML = '<div class="col-span-4 text-center text-slate-400 py-10 text-sm font-medium">도면 데이터를 불러올 수 없습니다.</div>'; return; }
+      let html = '';
+      slots.forEach(slot => {
+        let bgClass = 'bg-slate-800 border-slate-700'; let animClass = '';
+        if (slot.code === activeSelectedSlotCode) { bgClass = 'bg-blue-900/40 border-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.3)]'; }
+        else if (slot.status === 'vacant') { bgClass = 'bg-slate-800 border-dashed border-emerald-500/50 hover:bg-slate-700 cursor-pointer'; }
+        else if (slot.status === 'occupied') { bgClass = 'bg-slate-900 border-slate-800 opacity-60'; animClass = 'car-animated'; }
+        html += `<div class="parking-bay w-full aspect-[4/5] rounded-xl flex flex-col items-center justify-center relative border ${bgClass}" onclick="selectSlot('${slot.code}', '${slot.status}')">
+            <span class="absolute top-1.5 left-2 text-[10px] font-black text-slate-500">${slot.code}</span>
+            <span class="material-symbols-outlined text-[32px] ${slot.carColor} ${animClass}">${slot.carIcon}</span>
+            <span class="absolute bottom-1.5 text-[10px] font-bold ${slot.carColor}">${slot.label}</span></div>`;
+      });
+      grid.innerHTML = html;
+    }
+    function selectSlot(code, status) {
+      if (status === 'occupied') return;
+      const slots = floorPlanSlots[currentFloor];
+      const prevSelected = slots.find(s => s.code === activeSelectedSlotCode);
+      if (prevSelected) { prevSelected.status = 'vacant'; prevSelected.carColor = prevSelected.type === 'ev' ? 'text-amber-400' : 'text-emerald-500'; prevSelected.label = prevSelected.type === 'ev' ? 'EV 충전' : '빈자리'; }
+      const newSelected = slots.find(s => s.code === code);
+      if (newSelected) { newSelected.status = 'selected'; newSelected.carColor = 'text-blue-400'; newSelected.label = '선택됨'; activeSelectedSlotCode = code; if(document.getElementById('selected-spot-title')) document.getElementById('selected-spot-title').innerText = `${currentFloor}층 ${code} 구역`; }
+      renderFloorPlan(currentFloor);
+    }
+
+    /* Maps Utilities */
+    function setFilter(filterType, btnEl) {
+      document.querySelectorAll('.filter-btn').forEach(btn => { btn.classList.remove('active-chip', 'bg-primary', 'text-white'); btn.classList.add('bg-white', 'text-slate-700'); if(!btn.classList.contains('border')) btn.classList.add('border', 'border-slate-200'); });
+      btnEl.classList.remove('bg-white', 'text-slate-700', 'border', 'border-slate-200'); btnEl.classList.add('active-chip', 'bg-primary', 'text-white');
+      
+      // 마커 필터링 로직
+      if (!map) return;
+      parkingSpots.forEach(spot => {
+        if (!spot.marker) return;
+        
+        let isVisible = false;
+        if (filterType === 'all') {
+          isVisible = true;
+        } else if (filterType === 'available') {
+          isVisible = spot.vacancy && spot.vacancy.includes('여유');
+        } else if (filterType === 'congested') {
+          isVisible = spot.vacancy && spot.vacancy.includes('혼잡');
+        } else if (filterType === 'p2p') {
+          isVisible = spot.category === 'p2p';
+        }
+        
+        // 조건에 맞으면 지도에 표시, 아니면 숨김
+        spot.marker.setMap(isVisible ? map : null);
+      });
+
+      // 선택된 마커가 필터링으로 인해 숨겨졌을 경우 경로 안내 초기화
+      if (activeMarker && activeMarker.getMap() === null) {
+        if (routePolyline) routePolyline.setMap(null);
+        activeMarker = null;
+        const indicator = document.getElementById('route-indicator');
+        if (indicator) indicator.classList.add('hidden');
+      }
+    }
+    let isTrafficOn = false; let trafficLayerInstance = null;
+    function toggleTrafficLayer() {
+      const btn = document.getElementById('traffic-btn'); if (!map || !btn) return;
+      isTrafficOn = !isTrafficOn;
+      if (isTrafficOn) { if (!trafficLayerInstance) trafficLayerInstance = new google.maps.TrafficLayer(); trafficLayerInstance.setMap(map); btn.innerText = '교통정보 ON'; btn.classList.remove('bg-white/95', 'text-slate-700'); btn.classList.add('bg-emerald-500', 'text-white', 'border-emerald-500'); }
+      else { if (trafficLayerInstance) trafficLayerInstance.setMap(null); btn.innerText = '교통정보 OFF'; btn.classList.remove('bg-emerald-500', 'text-white', 'border-emerald-500'); btn.classList.add('bg-white/95', 'text-slate-700'); }
+    }
+    function toggleRouteLine() {
+      const btn = document.getElementById('route-btn'); if(!btn) return;
+      const indicator = document.getElementById('route-indicator');
+      isRouteOn = !isRouteOn;
+      if (isRouteOn) { 
+        btn.innerText = '경로 안내중'; 
+        btn.classList.replace('bg-blue-600', 'bg-indigo-600'); 
+        btn.classList.replace('border-blue-500', 'border-indigo-500'); 
+        if(indicator) indicator.classList.remove('hidden');
+      } else { 
+        btn.innerText = '도로 경로'; 
+        btn.classList.replace('bg-indigo-600', 'bg-blue-600'); 
+        btn.classList.replace('border-indigo-500', 'border-blue-500'); 
+        if(routePolyline) routePolyline.setMap(null); 
+        activeMarker = null;
+        if(indicator) indicator.classList.add('hidden');
+      }
+    }
+    function recenterLocation() { if (map) { map.panTo(USER_LOCATION); map.setZoom(16); } }
+    function handleSearch(e) { e.preventDefault(); const input = document.getElementById('map-search-input'); if (input && input.value && map) { map.panTo({ lat: USER_LOCATION.lat + 0.002, lng: USER_LOCATION.lng + 0.002 }); map.setZoom(17); } }
+
+    /* Page 3 Tab Switching */
+    function switchShareTab(tab) {
+      const driverView = document.getElementById('driver-view'); const hostView = document.getElementById('host-view');
+      const btnDriver = document.getElementById('tab-btn-driver'); const btnHost = document.getElementById('tab-btn-host');
+      if(!driverView || !hostView || !btnDriver || !btnHost) return;
+      if (tab === 'driver') {
+        driverView.classList.remove('hidden'); hostView.classList.add('hidden');
+        btnDriver.className = "flex-1 py-2 rounded-xl bg-white text-blue-600 font-bold shadow-sm text-sm transition-all"; btnDriver.innerHTML = '운전자 <span class="font-normal text-xs text-slate-500 ml-1">(예약)</span>';
+        btnHost.className = "flex-1 py-2 rounded-xl text-slate-500 font-medium text-sm transition-all hover:text-slate-700"; btnHost.innerHTML = '호스트 <span class="font-normal text-xs opacity-80 ml-1">(수익창출)</span>';
+      } else {
+        driverView.classList.add('hidden'); hostView.classList.remove('hidden');
+        btnHost.className = "flex-1 py-2 rounded-xl bg-white text-amber-600 font-bold shadow-sm text-sm transition-all"; btnHost.innerHTML = '호스트 <span class="font-normal text-xs text-slate-500 ml-1">(수익창출)</span>';
+        btnDriver.className = "flex-1 py-2 rounded-xl text-slate-500 font-medium text-sm transition-all hover:text-slate-700"; btnDriver.innerHTML = '운전자 <span class="font-normal text-xs opacity-80 ml-1">(예약)</span>';
+        updateTimeline();
+      }
+    }
+
+    /* Interactive Dual Timeline Slider */
+    function updateTimeline() {
+      const sliderMin = document.getElementById('slider-min'); const sliderMax = document.getElementById('slider-max'); const activeTrack = document.getElementById('slider-active-track');
+      if(!sliderMin || !sliderMax || !activeTrack) return;
+      let minVal = parseInt(sliderMin.value); let maxVal = parseInt(sliderMax.value);
+      if (minVal > maxVal) { const tmp = minVal; minVal = maxVal; maxVal = tmp; sliderMin.value = minVal; sliderMax.value = maxVal; }
+      const percentMin = (minVal / 24) * 100; const percentMax = (maxVal / 24) * 100;
+      activeTrack.style.left = `${percentMin}%`; activeTrack.style.right = `${100 - percentMax}%`;
+      const formatTime = (val) => `${val.toString().padStart(2, '0')}:00`;
+      if(document.getElementById('timeline-text-display')) document.getElementById('timeline-text-display').innerText = `${formatTime(minVal)} ~ ${formatTime(maxVal)}`;
+      const totalHours = maxVal - minVal;
+      if(document.getElementById('timeline-hours-display')) document.getElementById('timeline-hours-display').innerText = `총 ${totalHours}시간`;
+    }
+
+    /* Drag & Drop Expected Profit Calculator */
+    let calcTotalHours = 0; let calcTotalPrice = 0;
+    function formatCurrency(num) { return num.toLocaleString(); }
+    function dragStart(e) { e.dataTransfer.setData('text/plain', JSON.stringify({ hours: parseInt(e.target.getAttribute('data-hours')), price: parseInt(e.target.getAttribute('data-price')), label: e.target.getAttribute('data-label') })); }
+    function dragOver(e) { e.preventDefault(); if(document.getElementById('profit-dropzone')) document.getElementById('profit-dropzone').classList.add('dragover'); }
+    function dragLeave(e) { e.preventDefault(); if(document.getElementById('profit-dropzone')) document.getElementById('profit-dropzone').classList.remove('dragover'); }
+    function drop(e) {
+      e.preventDefault(); if(document.getElementById('profit-dropzone')) document.getElementById('profit-dropzone').classList.remove('dragover');
+      try { const data = JSON.parse(e.dataTransfer.getData('text/plain')); addDroppedItem(data.hours, data.price, data.label); } catch (err) { console.log("Drag & drop text parse error"); }
+    }
+    function clickToAddItem(el) { const hours = parseInt(el.getAttribute('data-hours')); const price = parseInt(el.getAttribute('data-price')); const label = el.getAttribute('data-label'); addDroppedItem(hours, price, label); }
+    function addDroppedItem(hours, price, label) {
+      if(document.getElementById('dropzone-placeholder')) document.getElementById('dropzone-placeholder').style.display = 'none';
+      calcTotalHours += hours; calcTotalPrice += price;
+      const container = document.getElementById('dropped-items-container');
+      if(!container) return;
+      const pill = document.createElement('div');
+      pill.className = 'profit-pill bg-white shadow-sm border border-emerald-200 rounded-lg px-2.5 py-1.5 flex items-center gap-1.5 pointer-events-auto cursor-pointer hover:bg-red-50 hover:border-red-200 transition-colors group';
+      pill.onclick = () => removeDroppedItem(pill, hours, price);
+      pill.innerHTML = `<span class="text-[11px] font-bold text-slate-700 group-hover:text-red-500">${label}</span><span class="text-[10px] text-emerald-600 font-extrabold group-hover:hidden">+${formatCurrency(price)}</span><span class="text-[10px] text-red-500 font-extrabold hidden group-hover:inline">삭제</span>`;
+      container.appendChild(pill);
+      updateCalculatorDisplay();
+    }
+    function removeDroppedItem(pillElement, hours, price) {
+      calcTotalHours -= hours; calcTotalPrice -= price; pillElement.remove();
+      const container = document.getElementById('dropped-items-container');
+      if(container && container.children.length === 0 && document.getElementById('dropzone-placeholder')) { document.getElementById('dropzone-placeholder').style.display = 'flex'; }
+      updateCalculatorDisplay();
+    }
+    function updateCalculatorDisplay() {
+      if(document.getElementById('calc-hours-display')) document.getElementById('calc-hours-display').innerText = `총 ${calcTotalHours}시간 점유`;
+      const priceEl = document.getElementById('calc-total-profit');
+      if(priceEl) {
+        priceEl.innerText = formatCurrency(calcTotalPrice); priceEl.classList.add('scale-110', 'text-teal-500');
+        setTimeout(() => { priceEl.classList.remove('scale-110', 'text-teal-500'); }, 150);
+      }
+    }
+    function resetCalculator() {
+      calcTotalHours = 0; calcTotalPrice = 0;
+      if(document.getElementById('dropped-items-container')) document.getElementById('dropped-items-container').innerHTML = '';
+      if(document.getElementById('dropzone-placeholder')) document.getElementById('dropzone-placeholder').style.display = 'flex';
+      updateCalculatorDisplay();
+    }
+  </script>
+</body>
+</html>
